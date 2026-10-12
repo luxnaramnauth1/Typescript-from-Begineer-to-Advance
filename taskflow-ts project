@@ -1,0 +1,95 @@
+# taskflow-ts
+
+A small, strictly typed task-tracking library and demo written in TypeScript. It focuses on type-safe domain modeling, explicit error handling, and a tested, dependency-free core.
+
+## Highlights
+
+- **Discriminated unions for state.** A task is `todo`, `in-progress`, or `done`, and each state carries only the data that applies to it. Invalid combinations, such as a completion time on a todo task, cannot be expressed.
+- **Result type instead of exceptions for expected failures.** Invalid transitions, unknown IDs, and bad input return `{ ok, error }`. Callers must handle both branches, and the compiler enforces it.
+- **Exhaustive checks.** Adding a new status without updating `summarize()` causes a compile-time error through a `never` check.
+- **Validation of untrusted input.** `validateNewTask(unknown)` narrows raw data into a typed `NewTask` and reports every problem in one pass.
+- **Injectable clock.** Timestamps come from a function passed to the store, so tests are deterministic.
+- **Strict compiler settings.** `strict`, `noUnusedLocals`, `noUnusedParameters`, and `noImplicitReturns` are all enabled.
+- **Tested.** Uses Node's built-in test runner (`node:test`) with no test framework dependency.
+
+## Project structure
+
+```
+src/
+  result.ts       Result<T, E> type and helpers (ok, err, map)
+  types.ts        Domain types: Task, TaskStatus (discriminated union), Priority
+  validation.ts   validateNewTask(): untrusted input -> Result<NewTask, issues>
+  taskStore.ts    TaskStore: add, start, complete, list, enforced transitions
+  stats.ts        summarize(): exhaustive status counting
+  index.ts        Public library exports
+  main.ts         Runnable demo
+test/
+  taskStore.test.ts
+  validation.test.ts
+```
+
+## Getting started
+
+Requires Node.js 18 or newer.
+
+```bash
+npm install
+npm run demo     # build and run the demo
+npm test         # build and run the test suite
+npm run typecheck
+```
+
+Example demo output:
+
+```
++ added T1 "Design REST API" (high)
++ added T2 "Write unit tests" (medium)
+x title: title is required
+x priority: priority must be one of: low, medium, high
+x tags: tags must be an array of strings
+T1 is now in-progress
+T1 is now done
+expected error: task T2 must be in progress before it can be completed
+summary: { total: 2, todo: 1, inProgress: 0, done: 1, openHighPriority: 0 }
+```
+
+## Usage as a library
+
+```ts
+import { TaskStore, validateNewTask } from "taskflow-ts";
+
+const store = new TaskStore();
+
+const parsed = validateNewTask({ title: "Write docs", priority: "low", tags: ["Docs"] });
+if (parsed.ok) {
+  const task = store.add(parsed.value);
+  const started = store.start(task.id);
+
+  if (started.ok) {
+    console.log(started.value.status); // { kind: "in-progress", startedAt: Date }
+  } else {
+    console.error(started.error);
+  }
+}
+```
+
+## Design decisions
+
+| Decision | Why |
+|----------|-----|
+| Discriminated union for `TaskStatus` | Makes illegal states unrepresentable and gives the compiler what it needs to narrow types. |
+| `Result` instead of thrown errors for domain failures | Failures are part of the normal flow, so they belong in the return type. Exceptions are kept for programmer errors. |
+| `validateNewTask` takes `unknown` | Data from outside the program is untrusted until it is checked. The type system only helps once the data is validated. |
+| Store returns `Result` from transitions | Every state change is checked, and the store is never left half-updated. |
+| No runtime dependencies | The core is easy to audit, and the only dev dependencies are TypeScript and Node type definitions. |
+
+## Possible next steps
+
+- Persist tasks to a JSON file or SQLite.
+- Add a CLI with `commander` or `yargs`.
+- Replace hand-written validation with a schema library such as `zod`, and compare the trade-offs.
+- Publish to npm with a GitHub Actions workflow that runs `npm test` on every push.
+
+## License
+
+MIT
